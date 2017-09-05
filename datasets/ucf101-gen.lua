@@ -20,107 +20,107 @@ local paths = require 'paths'
 local M = {}
 
 local function findClasses(dir)
-   local dirs = paths.dir(dir)
-   table.sort(dirs)
+    local dirs = paths.dir(dir)
+    table.sort(dirs)
 
-   local classList = {}
-   local classToIdx = {}
-   for _ ,class in ipairs(dirs) do
-      if not classToIdx[class] and class ~= '.' and class ~= '..' and class ~= '.DS_Store' then
-         table.insert(classList, class)
-         classToIdx[class] = #classList
-      end
-   end
+    local classList = {}
+    local classToIdx = {}
+    for _, class in ipairs(dirs) do
+        if not classToIdx[class] and class ~= '.' and class ~= '..' and class ~= '.DS_Store' then
+            table.insert(classList, class)
+            classToIdx[class] = #classList
+        end
+    end
 
-   return classList, classToIdx
+    return classList, classToIdx
 end
 
 local function findFeatures(dir, classToIdx)
-   local featurePath = torch.CharTensor()
-   local featureClass = torch.LongTensor()
+    local featurePath = torch.CharTensor()
+    local featureClass = torch.LongTensor()
 
-   ----------------------------------------------------------------------
-   -- Options for the GNU and BSD find command
-   local extensionList = {'t7'}
-   local findOptions = ' -iname "*.' .. extensionList[1] .. '"'
-   for i=2,#extensionList do
-      findOptions = findOptions .. ' -o -iname "*.' .. extensionList[i] .. '"'
-   end
+    ----------------------------------------------------------------------
+    -- Options for the GNU and BSD find command
+    local extensionList = { 't7' }
+    local findOptions = ' -iname "*.' .. extensionList[1] .. '"'
+    for i = 2, #extensionList do
+        findOptions = findOptions .. ' -o -iname "*.' .. extensionList[i] .. '"'
+    end
 
-   -- Find all the images using the find command
-   -- local f = io.popen('find -L ' .. dir .. findOptions)
-   local f = io.popen('find -L ' .. dir .. findOptions .. ' | sort')
+    -- Find all the images using the find command
+    -- local f = io.popen('find -L ' .. dir .. findOptions)
+    local f = io.popen('find -L ' .. dir .. findOptions .. ' | sort')
 
-   local maxLength = -1
-   local featurePaths = {}
-   local featureClasses = {}
+    local maxLength = -1
+    local featurePaths = {}
+    local featureClasses = {}
 
-   -- Generate a list of all the images and their class
-   while true do
-      local line = f:read('*line')
-      if not line then break end
+    -- Generate a list of all the images and their class
+    while true do
+        local line = f:read('*line')
+        if not line then break end
 
-      local className = paths.basename(paths.dirname(line))
-      local filename = paths.basename(line)
-      local path = className .. '/' .. filename
+        local className = paths.basename(paths.dirname(line))
+        local filename = paths.basename(line)
+        local path = className .. '/' .. filename
 
-      local classId = classToIdx[className]
-      assert(classId, 'class not found: ' .. className)
+        local classId = classToIdx[className]
+        assert(classId, 'class not found: ' .. className)
 
-      table.insert(featurePaths, path)
-      table.insert(featureClasses, classId)
+        table.insert(featurePaths, path)
+        table.insert(featureClasses, classId)
 
-      maxLength = math.max(maxLength, #path + 1)
-   end
+        maxLength = math.max(maxLength, #path + 1)
+    end
 
-   f:close()
+    f:close()
 
-   -- Convert the generated list to a tensor for faster loading
-   local nFeatures = #featurePaths
-   local featurePath = torch.CharTensor(nFeatures, maxLength):zero()
-   for i, path in ipairs(featurePaths) do
-      ffi.copy(featurePath[i]:data(), path)
-   end
+    -- Convert the generated list to a tensor for faster loading
+    local nFeatures = #featurePaths
+    local featurePath = torch.CharTensor(nFeatures, maxLength):zero()
+    for i, path in ipairs(featurePaths) do
+        ffi.copy(featurePath[i]:data(), path)
+    end
 
-   local featureClass = torch.LongTensor(featureClasses)
-   return featurePath, featureClass
+    local featureClass = torch.LongTensor(featureClasses)
+    return featurePath, featureClass
 end
 
 function M.exec(opt, cacheFile)
-   -- find the image path names
-   local featurePath = torch.CharTensor()  -- path to each image in dataset
-   local featureClass = torch.LongTensor() -- class index of each image (class index in self.classes)
+    -- find the image path names
+    local featurePath = torch.CharTensor() -- path to each image in dataset
+    local featureClass = torch.LongTensor() -- class index of each image (class index in self.classes)
 
-   local trainDir = paths.concat(opt.rgbData, 'train')
-   local valDir = paths.concat(opt.rgbData, 'val')
-   assert(paths.dirp(trainDir), 'train directory not found: ' .. trainDir)
-   assert(paths.dirp(valDir), 'val directory not found: ' .. valDir)
+    local trainDir = paths.concat(opt.rgbData, 'train')
+    local valDir = paths.concat(opt.rgbData, 'val')
+    assert(paths.dirp(trainDir), 'train directory not found: ' .. trainDir)
+    assert(paths.dirp(valDir), 'val directory not found: ' .. valDir)
 
-   print("=> Generating list of features")
-   local classList, classToIdx = findClasses(trainDir)
+    print("=> Generating list of features")
+    local classList, classToIdx = findClasses(trainDir)
 
-   print(" | finding all validation features")
-   local valFeaturePath, valFeatureClass = findFeatures(valDir, classToIdx)
+    print(" | finding all validation features")
+    local valFeaturePath, valFeatureClass = findFeatures(valDir, classToIdx)
 
-   print(" | finding all training features")
-   local trainFeaturePath, trainFeatureClass = findFeatures(trainDir, classToIdx)
+    print(" | finding all training features")
+    local trainFeaturePath, trainFeatureClass = findFeatures(trainDir, classToIdx)
 
-   local info = {
-      basedir = opt.rgbData,
-      classList = classList,
-      train = {
-         featurePath = trainFeaturePath,
-         featureClass = trainFeatureClass,
-      },
-      val = {
-         featurePath = valFeaturePath,
-         featureClass = valFeatureClass,
-      },
-   }
+    local info = {
+        basedir = opt.rgbData,
+        classList = classList,
+        train = {
+            featurePath = trainFeaturePath,
+            featureClass = trainFeatureClass,
+        },
+        val = {
+            featurePath = valFeaturePath,
+            featureClass = valFeatureClass,
+        },
+    }
 
-   print(" | saving list of features to " .. cacheFile)
-   torch.save(cacheFile, info)
-   return info
+    print(" | saving list of features to " .. cacheFile)
+    torch.save(cacheFile, info)
+    return info
 end
 
 return M
